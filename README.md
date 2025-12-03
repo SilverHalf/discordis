@@ -1,2 +1,3 @@
-# discordis
-Simple discord music bot
+# Discordis
+
+Simple discord music bot.
