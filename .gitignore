@@ -1,3 +1,7 @@
+# Lavaplayer
+plugins/
+Lavalink.jar
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

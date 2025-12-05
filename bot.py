@@ -3,6 +3,7 @@ import logging
 from queue import Queue
 import asyncio
 from py_yt import VideosSearch
+import lavalink
 
 class MusicBot(discord.Bot):
 
@@ -12,11 +13,12 @@ class MusicBot(discord.Bot):
         '''
 
         super().__init__(**kwargs)
-        self._logger: logging.Logger = self._prepare_logger()
+        self.logger: logging.Logger = self._prepare_logger()
 
         self._channel = int(channel)
-        self_currently_playing = None
+        self._currently_playing = None
         self._queue: Queue = None
+        self.lava: lavalink.Client = None
 
     def verify_context(self, ctx: discord.ApplicationContext):
         '''
@@ -39,8 +41,21 @@ class MusicBot(discord.Bot):
             return False
 
         return True
+    
+    async def connect_to_voice(self, ctx: discord.ApplicationContext):
+        await ctx.guild.change_voice_state(channel = ctx.author.voice.channel)
+        self.logger.info(f"Connected to voice channel {ctx.author.voice.channel.name} (ID {ctx.author.voice.channel.id})")
+        self.lava.player_manager.create(ctx.guild_id)
+        print(self.lava.nodes[0].available)
 
-    async def get_song(self, query: str):
+    async def disconnect_from_voice(self, ctx: discord.ApplicationContext):
+        await ctx.guild.change_voice_state(channel = None)
+        self.logger.info("Disconnected from voice channel.")
+
+    async def search_song(self, query: str):
+        '''
+        Searches for a query on youtube and returns information on the song.
+        '''
 
         result = await VideosSearch(query, limit=1, language='en', region='US').next()
 
@@ -55,7 +70,8 @@ class MusicBot(discord.Bot):
         handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
         logger.addHandler(handler)
 
+        return logger
+
 if __name__ == '__main__':
     bot = MusicBot('1096111829815672832')
-    asyncio.run(bot.get_song('sultans of swing'))
         
