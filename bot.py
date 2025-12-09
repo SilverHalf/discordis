@@ -4,6 +4,7 @@ from queue import Queue
 import asyncio
 from py_yt import VideosSearch
 import lavalink
+from voice import LavalinkVoiceClient
 
 class MusicBot(discord.Bot):
 
@@ -15,7 +16,8 @@ class MusicBot(discord.Bot):
         super().__init__(**kwargs)
         self.logger: logging.Logger = self._prepare_logger()
 
-        self._channel = int(channel)
+        self._text_channel = int(channel)
+
         self._currently_playing = None
         self._queue: Queue = None
         self.lava: lavalink.Client = None
@@ -28,9 +30,9 @@ class MusicBot(discord.Bot):
         '''
         channelid = ctx.channel_id
         guildid = ctx.guild_id
-        if channelid != self._channel:
+        if channelid != self._text_channel:
             asyncio.ensure_future(
-                ctx.respond(f"Invalid channel! Try asking in https://discord.com/channels/{guildid}/{self._channel}.")
+                ctx.respond(f"Invalid channel! Try asking in https://discord.com/channels/{guildid}/{self._text_channel}.")
             )
             return False
 
@@ -43,14 +45,23 @@ class MusicBot(discord.Bot):
         return True
     
     async def connect_to_voice(self, ctx: discord.ApplicationContext):
-        await ctx.guild.change_voice_state(channel = ctx.author.voice.channel)
+        channel = ctx.author.voice.channel
+        await channel.connect(cls=LavalinkVoiceClient)
         self.logger.info(f"Connected to voice channel {ctx.author.voice.channel.name} (ID {ctx.author.voice.channel.id})")
-        self.lava.player_manager.create(ctx.guild_id)
-        print(self.lava.nodes[0].available)
 
     async def disconnect_from_voice(self, ctx: discord.ApplicationContext):
-        await ctx.guild.change_voice_state(channel = None)
-        self.logger.info("Disconnected from voice channel.")
+        '''
+        Disconnects the bot from a voice channel if it is connected.
+        '''
+
+        guild = ctx.guild
+        if isinstance(guild, discord.Guild):
+            await guild.voice_client.disconnect(force = True)
+            self.logger.info("Disconnected from voice channel.")
+            await ctx.respond("I'm off for now!")
+        else:
+            raise TypeError(f"Guild is of wrong type: {type(guild)}")
+    
 
     async def search_song(self, query: str):
         '''
@@ -71,6 +82,22 @@ class MusicBot(discord.Bot):
         logger.addHandler(handler)
 
         return logger
+    
+    def _prepare_lavalink(self,
+            password: str,
+            host: str = 'localhost',
+            port: int = 2333,
+            region: str = 'eu'):
+
+        lava = lavalink.Client(self.application_id)
+        lava.add_node(
+                host=host,
+                port=port,
+                password=password,
+                region=region,
+                name='discordis-node')
+        
+        self.lava = lava
 
 if __name__ == '__main__':
     bot = MusicBot('1096111829815672832')
