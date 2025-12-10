@@ -1,7 +1,6 @@
 import discord
 from dotenv import dotenv_values
 from bot import MusicBot
-import lavalink
 
 CONFIG = dotenv_values()
 BOT_TOKEN = CONFIG['BOT_TOKEN']
@@ -16,34 +15,20 @@ async def on_ready():
     bot.logger.info(f"{bot.user} is ready and online.")
     bot._prepare_lavalink(password=CONFIG['LAVALINK_PW'])
 
-@bot.slash_command(name="hello", description="Say hello to Acan!")
-async def hello(ctx: discord.ApplicationContext):
-    await ctx.respond("Hey!")
+@bot.slash_command(name="play", description="Play a song or resume playback.")
+async def play(ctx: discord.ApplicationContext, query: str | None = None):
+    await bot.play(query, ctx)
 
-@bot.slash_command(name="play", description="Have Acan play a song.")
-async def play(ctx: discord.ApplicationContext, query: str):
-    if not bot.verify_context(ctx):
-        return
-    
-    await bot.connect_to_voice(ctx)
-    msg = await ctx.respond(f"Searching for {query}")
-    # songdata = await bot.search_song(query)
-    
-    player: lavalink.player.BasePlayer = bot.lava.player_manager.get(ctx.guild_id)
-    query = query.strip('<>')
-    query = f'ytsearch:{query}'
-    results = await player.node.get_tracks(query)
-    track = results.tracks[0]
-    track.extra["requester"] = ctx.author.id
-    await player.play_track(track=track)
-    await msg.edit_original_response(content=f"Now playing {track.title}")
+@bot.slash_command(name="skip", description="Skip the currently playing song.")
+async def skip(ctx: discord.ApplicationContext):
+    await bot.skip(ctx)
 
+@bot.slash_command(name="pause", description="Pauses the currently playing song.")
+async def pause(ctx: discord.ApplicationContext):
+    await bot.pause(ctx)
 
-@bot.slash_command(name="disconnect", description="Disconnect Acan from voice chat.")
+@bot.slash_command(name="disconnect", description="Stop all playback and disconnect from voice chat.")
 async def disconnect(ctx: discord.ApplicationContext):
-    if not bot.verify_context(ctx):
-        return
-    
     await bot.disconnect_from_voice(ctx)
 
 bot.run(BOT_TOKEN)
