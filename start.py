@@ -1,19 +1,18 @@
 import discord
-from dotenv import dotenv_values
+from dotenv import load_dotenv
 from bot import MusicBot
+from os import getenv
 
-CONFIG = dotenv_values()
-BOT_TOKEN = CONFIG['BOT_TOKEN']
-BOT_CHANNEL_ID = CONFIG['BOT_CHANNEL_ID']
-
-bot = MusicBot(BOT_CHANNEL_ID)
+load_dotenv()
 
 # todo autostart lavalink jar?
+
+bot = MusicBot()
 
 @bot.event
 async def on_ready():
     bot.logger.info(f"{bot.user} is ready and online.")
-    bot._prepare_lavalink(password=CONFIG['LAVALINK_PW'])
+    bot._prepare_lavalink(password=getenv('LAVALINK_PW'))
 
 @bot.slash_command(name="play", description="Play a song or resume playback.")
 async def play(ctx: discord.ApplicationContext, query: str | None = None):
@@ -31,4 +30,8 @@ async def pause(ctx: discord.ApplicationContext):
 async def disconnect(ctx: discord.ApplicationContext):
     await bot.disconnect_from_voice(ctx)
 
-bot.run(BOT_TOKEN)
+@bot.slash_command(name="queue", description="Shows all songs currently in queue.")
+async def queue(ctx: discord.ApplicationContext):
+    await bot.show_queue(ctx)
+
+bot.run(getenv('BOT_TOKEN'))

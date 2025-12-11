@@ -1,50 +1,32 @@
 import discord
 import logging
-from queue import Queue
 import asyncio
-from py_yt import VideosSearch
 import lavalink
+from lavalink import listener
 from voice import LavalinkVoiceClient
+import embeds
 
 class MusicBot(discord.Bot):
 
-    def __init__(self, channel: int | str, **kwargs):
+    def __init__(self, **kwargs):
         '''
         Starts a new MusicBot instance.
         '''
 
         super().__init__(**kwargs)
         self.logger: logging.Logger = self._prepare_logger()
-
-        self._text_channel = int(channel)
-
-        self._currently_playing = None
-        self._queue: Queue = None
+        self._text_channels: dict[int, int] = {}
         self.lava: lavalink.Client = None
-
-    def verify_context(self, ctx: discord.ApplicationContext):
-        '''
-        Verifies that the context of the message is correct:
-        - command was sent in the right channel
-        - command was sent by a user in the voice channel
-        '''
-        channelid = ctx.channel_id
-        guildid = ctx.guild_id
-        if channelid != self._text_channel:
-            asyncio.ensure_future(
-                ctx.respond(f"Invalid channel! Try asking in https://discord.com/channels/{guildid}/{self._text_channel}.")
-            )
-            return False
-
-        if ctx.author.voice is None:
-            asyncio.ensure_future(
-                ctx.respond("You must be connected to a voice channel to use music commands!")
-            )
-            return False
-
-        return True
+        self._queue_display_limit = 10
+        self._inactivity_minutes = 5
     
     async def play(self, query: str, ctx: discord.ApplicationContext):
+        '''
+        Resumes playback if a track is paused.
+        If no track is paused, searches for the query and plays the first result.
+        If a track is currently playing, the result is queued instead.
+        '''
+
         if not self.verify_context(ctx):
             return
 
@@ -53,7 +35,7 @@ class MusicBot(discord.Bot):
             await self.connect_to_voice(ctx)
         
         # Creating lavaplayer node
-        player: lavalink.player.DefaultPlayer = self.lava.player_manager.get(ctx.guild_id)
+        player = self._get_player(ctx.guild_id)
 
         # If no query is passed, resuming playback if possible
         if query is None:
@@ -66,7 +48,7 @@ class MusicBot(discord.Bot):
 
         # Isearching youtube for query
         # TODO: replace with embed
-        msg = await ctx.respond(f"Searching for {query}")
+        msg = await ctx.respond(f"Searching for '{query}'...")
         results = await player.node.get_tracks(f'ytsearch:{query.strip('<>')}')
         track = results.tracks[0]
         track.extra["requester"] = ctx.author.id
@@ -75,15 +57,17 @@ class MusicBot(discord.Bot):
         if not player.is_playing:
             self._currently_playing = track
             await player.play_track(track=track)
-            await msg.edit_original_response(content=f"Now playing: {track.title}")
         else:
             player.queue.append(track)
-            await msg.edit_original_response(content=f"Queued: {track.title}")
+            await msg.edit_original_response(embed=embeds.track("Queued:", track))
 
         # Feedback on track started
         # TODO: edit embed created above
 
     async def pause(self, ctx: discord.ApplicationContext):
+        '''
+        Pauses playback.
+        '''
 
         if not self.verify_context(ctx):
             return
@@ -92,7 +76,7 @@ class MusicBot(discord.Bot):
             await ctx.respond("I'm not connected to any voice channels!")
             return
         
-        player: lavalink.player.DefaultPlayer = self.lava.player_manager.get(ctx.guild_id)
+        player = self._get_player(ctx.guild_id)
         if not player.is_playing:
             await ctx.respond("I'm not playing anything right now!")
             return
@@ -101,6 +85,9 @@ class MusicBot(discord.Bot):
         await ctx.respond("Playback is paused.")
 
     async def skip(self, ctx: discord.ApplicationContext):
+        '''
+        Skips the current track.
+        '''
 
         if not self.verify_context(ctx):
             return
@@ -109,13 +96,25 @@ class MusicBot(discord.Bot):
             await ctx.respond("I'm not connected to any voice channels!")
             return
         
-        player: lavalink.player.DefaultPlayer = self.lava.player_manager.get(ctx.guild_id)
+        player = self._get_player(ctx.guild_id)
         if not player.is_playing:
             await ctx.respond("I'm not playing anything right now!")
             return
         
         await player.skip()
         await ctx.respond("Skipped current song.")
+
+    async def show_queue(self, ctx: discord.ApplicationContext):
+        '''
+        Displays an embed that shows the next songs in queue.
+        '''
+
+        queued_tracks = self._get_player(ctx.guild_id).queue
+        num_queued = len(queued_tracks)
+        msg = f"Showing {min(num_queued, self._queue_display_limit)} out of {num_queued} queued tracks."
+        num_queued > self._queue_display_limit
+        queued_tracks = queued_tracks[:self._queue_display_limit]
+        await ctx.respond(embeds.multi_track(msg, queued_tracks))
     
     async def connect_to_voice(self, ctx: discord.ApplicationContext):
         '''
@@ -145,15 +144,50 @@ class MusicBot(discord.Bot):
             await guild.voice_client.disconnect(force = True)
             self.logger.info(f"Disconnected from voice channel {ctx.author.voice.channel.name} (ID {ctx.author.voice.channel.id})")
             await ctx.respond("I'm off for now!")
+
+    def verify_context(self, ctx: discord.ApplicationContext):
+        '''
+        Verifies that the context of the message is correct:
+        - command was sent in the right channel
+        - command was sent by a user in the voice channel
+        '''
+
+        channelid = ctx.channel_id
+        guildid = ctx.guild_id
+
+        if guildid not in self._text_channels:
+            self._text_channels[guildid] = channelid
+
+        if channelid != self._text_channels[guildid]:
+            asyncio.ensure_future(
+                ctx.respond(f"Invalid channel! Try asking in https://discord.com/channels/{guildid}/{self._text_channels[guildid]}.")
+            )
+            return False
+
+        if ctx.author.voice is None:
+            asyncio.ensure_future(
+                ctx.respond("You must be connected to a voice channel to use music commands!")
+            )
+            return False
+
+        return True
     
-    async def search_song(self, query: str):
+    @listener(lavalink.TrackStartEvent)
+    async def update_song_display(self, event: lavalink.TrackStartEvent):
         '''
-        Searches for a query on youtube and returns information on the song.
+        Whenever a song starts playing, displays infomation on the
+        song in the appropriate channel.
         '''
 
-        result = await VideosSearch(query, limit=1, language='en', region='US').next()
+        guild_id = event.player.guild_id
+        channel_id = self._text_channels[guild_id]
+        channel = self.get_guild(guild_id).get_channel(channel_id)
+        await channel.send(embed=embeds.track("Now Playing", event.track))
+    
+    def _get_player(self, guild_id) -> lavalink.player.DefaultPlayer:
+        '''Gets the player corresponding to the given guild.'''
 
-        return result['result'][0]
+        return self.lava.player_manager.get(guild_id)
     
     def _prepare_logger(self):
         '''Prepares a logger for the bot.'''
@@ -172,7 +206,9 @@ class MusicBot(discord.Bot):
             port: int = 2333,
             region: str = 'eu'):
 
-        lava = lavalink.Client(self.application_id)
+        app_id = self.application_id
+        assert(isinstance(app_id, int))
+        lava = lavalink.Client(app_id)
         lava.add_node(
                 host=host,
                 port=port,
@@ -181,7 +217,4 @@ class MusicBot(discord.Bot):
                 name='discordis-node')
         
         self.lava = lava
-
-if __name__ == '__main__':
-    bot = MusicBot('1096111829815672832')
-        
+        self.lava.add_event_hooks(self)

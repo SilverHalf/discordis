@@ -1,5 +1,4 @@
 py-cord
 python-dotenv
 PyNaCl
-py-yt-search
 lavalink
