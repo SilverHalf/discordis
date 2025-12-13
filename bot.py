@@ -84,9 +84,9 @@ class MusicBot(discord.Bot):
         await player.set_pause(True)
         await ctx.respond("Playback is paused.")
 
-    async def skip(self, ctx: discord.ApplicationContext):
+    async def skip(self, ctx: discord.ApplicationContext, queued_song: int | None):
         '''
-        Skips the current track.
+        Skips the current track, or if a number is specified removes the queued track in that position.
         '''
 
         if not self.verify_context(ctx):
@@ -101,8 +101,17 @@ class MusicBot(discord.Bot):
             await ctx.respond("I'm not playing anything right now!")
             return
         
-        await player.skip()
-        await ctx.respond("Skipped current song.")
+        if queued_song is None:
+            await player.skip()
+            await ctx.respond("Skipped current song.")
+        
+        else:
+            if len(player.queue) > queued_song or queued_song < 1:
+                await ctx.respond(f"Invalid option: {queued_song}")
+            else:
+                song_title = player.queue[queued_song - 1].title
+                player.queue.remove(player.queue[queued_song - 1])
+                await ctx.respond(f"Removed from queue: {song_title}")
 
     async def show_queue(self, ctx: discord.ApplicationContext):
         '''
@@ -114,7 +123,30 @@ class MusicBot(discord.Bot):
         msg = f"Showing {min(num_queued, self._queue_display_limit)} out of {num_queued} queued tracks."
         num_queued > self._queue_display_limit
         queued_tracks = queued_tracks[:self._queue_display_limit]
-        await ctx.respond(embeds.multi_track(msg, queued_tracks))
+        await ctx.respond(embed=embeds.multi_track(msg, queued_tracks))
+    
+    async def next(self, ctx: discord.ApplicationContext, queued_song: int):
+        '''Moves the song at the provided queue position to the top of the queue.'''
+
+        if not self.verify_context(ctx):
+            return
+
+        if ctx.guild.voice_client is None:
+            await ctx.respond("I'm not connected to any voice channels!")
+            return
+        
+        player = self._get_player(ctx.guild_id)
+        if not player.is_playing:
+            await ctx.respond("I'm not playing anything right now!")
+            return
+        
+        if len(player.queue) > queued_song or queued_song < 1:
+            await ctx.respond(f"Invalid option: {queued_song}")
+        else:
+            song = player.queue[queued_song - 1]
+            player.queue.remove(song)
+            player.queue = [song] + player.queue
+            await ctx.respond(f"Moved {song.title} to the top of the queue.")
     
     async def connect_to_voice(self, ctx: discord.ApplicationContext):
         '''

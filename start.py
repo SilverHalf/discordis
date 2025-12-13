@@ -18,9 +18,9 @@ async def on_ready():
 async def play(ctx: discord.ApplicationContext, query: str | None = None):
     await bot.play(query, ctx)
 
-@bot.slash_command(name="skip", description="Skip the currently playing song.")
-async def skip(ctx: discord.ApplicationContext):
-    await bot.skip(ctx)
+@bot.slash_command(name="skip", description="Skip the currently playing song, or the queued track in a given position.")
+async def skip(ctx: discord.ApplicationContext, queue_postion: int | None = None):
+    await bot.skip(ctx, queue_postion)
 
 @bot.slash_command(name="pause", description="Pauses the currently playing song.")
 async def pause(ctx: discord.ApplicationContext):
@@ -33,5 +33,13 @@ async def disconnect(ctx: discord.ApplicationContext):
 @bot.slash_command(name="queue", description="Shows all songs currently in queue.")
 async def queue(ctx: discord.ApplicationContext):
     await bot.show_queue(ctx)
+
+@bot.slash_command(name="next", description="Moves the song in the given position to the top of the queue.")
+async def next(ctx: discord.ApplicationContext, queue_postion: int):
+    await bot.next(ctx, queue_postion)
+
+@bot.slash_command(name="search", description="Look for a song and play the result.")
+async def search(ctx: discord.ApplicationContext):
+    await ctx.respond("Work in progress!")
 
 bot.run(getenv('BOT_TOKEN'))
