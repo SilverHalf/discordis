@@ -5,6 +5,7 @@ import lavalink
 from lavalink import listener
 from voice import LavalinkVoiceClient
 import embeds
+import spotify
 
 class MusicBot(discord.Bot):
 
@@ -17,8 +18,9 @@ class MusicBot(discord.Bot):
         self.logger: logging.Logger = self._prepare_logger()
         self._text_channels: dict[int, int] = {}
         self.lava: lavalink.Client = None
-        self._queue_display_limit = 10
+        self._queue_display_limit = 5
         self._inactivity_minutes = 5
+        self._search_results: list[lavalink.AudioTrack | lavalink.DeferredAudioTrack] | None = None
     
     async def play(self, query: str, ctx: discord.ApplicationContext):
         '''
@@ -45,6 +47,25 @@ class MusicBot(discord.Bot):
             await player.set_pause(False)
             await ctx.respond("Playback resumed.")
             return
+        
+        # managing searches
+        if query.isdigit() and int(query) > 0 and int(query) <= self._queue_display_limit:
+            if self._search_results is not None:
+                track = self._search_results[int(query) - 1]
+                track.extra["requester"] = ctx.author.id
+                # Playing track or queueing if already playing
+                if not player.is_playing:
+                    await ctx.respond(f"Playing track {query} from search results.")
+                    await player.play_track(track=track)
+                else:
+                    player.queue.append(track)
+                    await ctx.respond(embed=embeds.track("Queued:", track))
+                return
+        
+        if 'open.spotify.com' in query:
+            query = spotify.query_from_link(query)
+            if query is None:
+                await ctx.respond("You did not provide a valid spotify URL!")
 
         # Isearching youtube for query
         # TODO: replace with embed
@@ -55,7 +76,6 @@ class MusicBot(discord.Bot):
 
         # Playing track or queueing if already playing
         if not player.is_playing:
-            self._currently_playing = track
             await player.play_track(track=track)
         else:
             player.queue.append(track)
@@ -101,13 +121,13 @@ class MusicBot(discord.Bot):
             await ctx.respond("I'm not playing anything right now!")
             return
         
-        if queued_song is None:
+        if queued_song is None or queued_song == 0:
             await player.skip()
             await ctx.respond("Skipped current song.")
         
         else:
-            if len(player.queue) > queued_song or queued_song < 1:
-                await ctx.respond(f"Invalid option: {queued_song}")
+            if queued_song > len(player.queue)  or queued_song < 1:
+                await ctx.respond(f"Invalid option: {queued_song}. Please give an option between 0 and {len(player.queue)}.")
             else:
                 song_title = player.queue[queued_song - 1].title
                 player.queue.remove(player.queue[queued_song - 1])
@@ -123,7 +143,7 @@ class MusicBot(discord.Bot):
         msg = f"Showing {min(num_queued, self._queue_display_limit)} out of {num_queued} queued tracks."
         num_queued > self._queue_display_limit
         queued_tracks = queued_tracks[:self._queue_display_limit]
-        await ctx.respond(embed=embeds.multi_track(msg, queued_tracks))
+        await ctx.respond(embed=embeds.queue_display(msg, queued_tracks))
     
     async def next(self, ctx: discord.ApplicationContext, queued_song: int):
         '''Moves the song at the provided queue position to the top of the queue.'''
@@ -177,6 +197,33 @@ class MusicBot(discord.Bot):
             self.logger.info(f"Disconnected from voice channel {ctx.author.voice.channel.name} (ID {ctx.author.voice.channel.id})")
             await ctx.respond("I'm off for now!")
 
+    async def search(self, query: str, ctx: discord.ApplicationContext):
+        '''
+        Provides top search results for the provided query.
+        Caches these results for later playback using the /play command.
+        '''
+
+        if not self.verify_context(ctx):
+            return
+        
+        # Creating lavaplayer node
+        player = self._get_player(ctx.guild_id)
+        if player is None:
+            player = self._create_player(ctx.guild_id)
+        
+        if 'open.spotify.com' in query:
+            query = spotify.query_from_link(query)
+            if query is None:
+                await ctx.respond("You did not provide a valid spotify URL!")
+
+        # Isearching youtube for query
+        # TODO: replace with embed
+        msg = await ctx.respond(f"Searching for '{query}'...")
+        results = await player.node.get_tracks(f'ytsearch:{query.strip('<>')}')
+        tracks = results.tracks[:self._queue_display_limit]
+        self._search_results = tracks
+        await msg.edit_original_response(embed=embeds.search_display(tracks))
+
     def verify_context(self, ctx: discord.ApplicationContext):
         '''
         Verifies that the context of the message is correct:
@@ -216,10 +263,15 @@ class MusicBot(discord.Bot):
         channel = self.get_guild(guild_id).get_channel(channel_id)
         await channel.send(embed=embeds.track("Now Playing", event.track))
     
-    def _get_player(self, guild_id) -> lavalink.player.DefaultPlayer:
+    def _get_player(self, guild_id: int) -> lavalink.player.DefaultPlayer:
         '''Gets the player corresponding to the given guild.'''
 
         return self.lava.player_manager.get(guild_id)
+    
+    def _create_player(self, guild_id: int) -> lavalink.player.DefaultPlayer:
+        '''Creates a player corresponding to the given guild.'''
+
+        return self.lava.player_manager.create(guild_id)
     
     def _prepare_logger(self):
         '''Prepares a logger for the bot.'''

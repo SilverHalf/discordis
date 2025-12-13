@@ -14,7 +14,7 @@ def track(name: str, track: AudioTrack) -> discord.Embed:
 
     return embed
 
-def multi_track(name: str, tracks: list[AudioTrack]) -> discord.Embed:
+def queue_display(name: str, tracks: list[AudioTrack]) -> discord.Embed:
     '''Creates an embed for a list of tracks.'''
 
     embed = discord.Embed(title=name, color=discord.Colour.dark_green())
@@ -26,9 +26,20 @@ def multi_track(name: str, tracks: list[AudioTrack]) -> discord.Embed:
     
     return embed
 
-def track_selection(total) -> discord.ui.View:
-    '''Creates a user interface for selecting a track.'''
+def search_display(tracks: list[AudioTrack]) -> discord.Embed:
+    '''Shows search options.'''
 
-    view = discord.ui.View(timeout=30)
-    for i in range(total):
-        view.add_item(discord.ui.Button(label=str(i+1), ))
+    embed = discord.Embed(
+        title="Search Results",
+        description="You can play one of these tracks by passing its number to /play, for example `/play 1`.",
+        color=discord.Colour.dark_green())
+
+    for i, track in enumerate(tracks):
+        duration = timedelta(milliseconds=track.duration)
+        embed.add_field(
+            name=f"{i + 1}. {track.title}",
+            value=f"Channel: {track.author} | Duration: {str(duration)}",
+            inline=False)
+    
+    return embed
+    

@@ -39,8 +39,9 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
     
     async def connect(self, *, timeout: float, reconnect: bool):
         # Called when connecting to a voice channel
-
-        self.lavalink.player_manager.create(self.channel.guild.id)
+         
+        if self.lavalink.player_manager.get(self.channel.guild.id) is None:
+            self.lavalink.player_manager.create(self.channel.guild.id)
         await self.channel.guild.change_voice_state(channel = self.channel)
 
     async def disconnect(self, *, force = False):

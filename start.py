@@ -39,7 +39,7 @@ async def next(ctx: discord.ApplicationContext, queue_postion: int):
     await bot.next(ctx, queue_postion)
 
 @bot.slash_command(name="search", description="Look for a song and play the result.")
-async def search(ctx: discord.ApplicationContext):
-    await ctx.respond("Work in progress!")
+async def search(ctx: discord.ApplicationContext, query: str):
+    await bot.search(query, ctx)
 
 bot.run(getenv('BOT_TOKEN'))
