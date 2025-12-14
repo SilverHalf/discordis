@@ -261,7 +261,7 @@ class MusicBot(discord.Bot):
             await player.play_track(track=track)
         else:
             player.queue.append(track)
-            await ctx.respond(embed=embeds.track("Queued in position {len(player.queue)}:", track))
+            await ctx.respond(embed=embeds.track(f"Queued in position {len(player.queue)}:", track))
 
 
     async def _search_yt(self, query: str, ctx: discord.ApplicationContext) -> list[lavalink.AudioTrack]:
