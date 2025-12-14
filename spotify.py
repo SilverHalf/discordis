@@ -7,7 +7,7 @@ import os
 def query_from_link(url: str) -> str | None:
     '''
     Given a spotify url, returns an appopriate search query containing
-    the track's name and author.
+    the track's name and author. If the url is invalid, returns none.
     '''
 
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
