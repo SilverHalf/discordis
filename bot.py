@@ -5,6 +5,7 @@ from lavalink import listener
 from voice import LavalinkVoiceClient
 import embeds
 import spotify
+from timer import DisconnectTimer
 
 class MusicBot(discord.Bot):
 
@@ -18,9 +19,9 @@ class MusicBot(discord.Bot):
         self._text_channels: dict[int, int] = {}
         self.lava: lavalink.Client = None
         self._queue_display_limit = 5
-        self._inactivity_minutes = 5
+        self._inactivity_seconds = 300
         self._search_results: dict[int, list[lavalink.AudioTrack | lavalink.DeferredAudioTrack]] = {}
-
+        self._inactivity_timer: dict[int, DisconnectTimer] = {}
 
     async def play(self, query: str, ctx: discord.ApplicationContext):
         '''
@@ -29,6 +30,7 @@ class MusicBot(discord.Bot):
         If a track is currently playing, the result is queued instead.
         '''
 
+        self.reset_inactivity_timer(ctx)
         if not await self.verify_context(ctx):
             return
 
@@ -58,6 +60,7 @@ class MusicBot(discord.Bot):
         Pauses playback.
         '''
 
+        self.reset_inactivity_timer(ctx)
         if not await self.verify_context(ctx, requires_voice = True):
             return
         
@@ -76,6 +79,7 @@ class MusicBot(discord.Bot):
         Skips the current track, or if a number is specified removes the queued track in that position.
         '''
 
+        self.reset_inactivity_timer(ctx)
         if not await self.verify_context(ctx, requires_voice = True):
             return
         
@@ -103,7 +107,7 @@ class MusicBot(discord.Bot):
         Provides top search results for the provided query.
         Caches these results for later playback using the /play command.
         '''
-
+        self.reset_inactivity_timer(ctx)
         if not await self.verify_context(ctx):
             return
         
@@ -120,6 +124,7 @@ class MusicBot(discord.Bot):
         Displays an embed that shows the next songs in queue.
         '''
 
+        self.reset_inactivity_timer(ctx)
         queued_tracks = self._get_player(ctx.guild_id).queue
         num_queued = len(queued_tracks)
         msg = f"Showing {min(num_queued, self._queue_display_limit)} out of {num_queued} queued tracks."
@@ -132,6 +137,7 @@ class MusicBot(discord.Bot):
     async def next(self, ctx: discord.ApplicationContext, queued_song: int):
         '''Moves the song at the provided queue position to the top of the queue.'''
 
+        self.reset_inactivity_timer(ctx)
         if not await self.verify_context(ctx):
             return
 
@@ -175,6 +181,7 @@ class MusicBot(discord.Bot):
 
         if not await self.verify_context(ctx, requires_voice = True):
             return
+        self.get_guild()
         await ctx.guild.voice_client.disconnect(force = True)
         await ctx.respond("👋")
 
@@ -228,6 +235,21 @@ class MusicBot(discord.Bot):
         channel = self.get_guild(guild_id).get_channel(channel_id)
         await channel.send(embed=embeds.track("Now Playing", event.track))
         self.logger.info(f"Started playing: {event.track.title}")
+    
+
+    @listener(lavalink.QueueEndEvent)
+    async def start_inactivity_timer(self, event: lavalink.QueueEndEvent):
+        '''Starts an inactivity timer whenever music is no longer playing.'''
+        
+        self._inactivity_timer[event.player.guild_id] = DisconnectTimer(self._inactivity_seconds, self._disconnect, event.player.guild_id)
+
+    def reset_inactivity_timer(self, ctx: discord.ApplicationContext):
+        '''Resets an inactivity timer.'''
+
+        if ctx.guild_id not in self._inactivity_timer:
+            return
+        
+        self._inactivity_timer[ctx.guild_id].cancel()
 
 
     async def _play_track(self, ctx: discord.ApplicationContext, track: lavalink.AudioTrack):
@@ -266,6 +288,12 @@ class MusicBot(discord.Bot):
 
         player = self.lava.player_manager.get(guild_id)
         return player if player is not None else self.lava.player_manager.create(guild_id)
+
+    async def _disconnect(self, guild_id: int):
+        '''Alternative disconnect.'''
+
+        guild = self.get_guild(guild_id)
+        await guild.voice_client.disconnect(force = True)
     
 
     def _prepare_logger(self):
