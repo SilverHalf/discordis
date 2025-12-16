@@ -1,11 +1,14 @@
+'''
+This module contains most functionality required for the music bot.
+'''
+
 import discord
 import logging
 import lavalink
-from lavalink import listener
-from voice import LavalinkVoiceClient
-import embeds
-import spotify
-from timer import DisconnectTimer
+from .voice import LavalinkVoiceClient
+from .embeds import display_track, display_queue, display_search
+from .spotify import query_from_link
+from .timer import DisconnectTimer
 
 class MusicBot(discord.Bot):
 
@@ -116,7 +119,7 @@ class MusicBot(discord.Bot):
             return
         tracks = tracks[:self._queue_display_limit]
         self._search_results[ctx.guild_id] = tracks
-        await ctx.respond(embed=embeds.search_display(tracks))
+        await ctx.respond(embed=display_search(tracks))
 
 
     async def show_queue(self, ctx: discord.ApplicationContext):
@@ -130,7 +133,7 @@ class MusicBot(discord.Bot):
         msg = f"Showing {min(num_queued, self._queue_display_limit)} out of {num_queued} queued tracks."
         num_queued > self._queue_display_limit
         queued_tracks = queued_tracks[:self._queue_display_limit]
-        await ctx.respond(embed=embeds.queue_display(msg, queued_tracks))
+        await ctx.respond(embed=display_queue(msg, queued_tracks))
         self.logger.info("Displayed queue.")
 
 
@@ -181,7 +184,6 @@ class MusicBot(discord.Bot):
 
         if not await self.verify_context(ctx, requires_voice = True):
             return
-        self.get_guild()
         await ctx.guild.voice_client.disconnect(force = True)
         await ctx.respond("👋")
 
@@ -223,7 +225,7 @@ class MusicBot(discord.Bot):
         return True
 
 
-    @listener(lavalink.TrackStartEvent)
+    @lavalink.listener(lavalink.TrackStartEvent)
     async def update_song_display(self, event: lavalink.TrackStartEvent):
         '''
         Whenever a song starts playing, displays infomation on the
@@ -233,11 +235,11 @@ class MusicBot(discord.Bot):
         guild_id = event.player.guild_id
         channel_id = self._text_channels[guild_id]
         channel = self.get_guild(guild_id).get_channel(channel_id)
-        await channel.send(embed=embeds.track("Now Playing", event.track))
+        await channel.send(embed=display_track("Now Playing", event.track))
         self.logger.info(f"Started playing: {event.track.title}")
     
 
-    @listener(lavalink.QueueEndEvent)
+    @lavalink.listener(lavalink.QueueEndEvent)
     async def start_inactivity_timer(self, event: lavalink.QueueEndEvent):
         '''Starts an inactivity timer whenever music is no longer playing.'''
         
@@ -261,7 +263,7 @@ class MusicBot(discord.Bot):
             await player.play_track(track=track)
         else:
             player.queue.append(track)
-            await ctx.respond(embed=embeds.track(f"Queued in position {len(player.queue)}:", track))
+            await ctx.respond(embed=display_track(f"Queued in position {len(player.queue)}:", track))
 
 
     async def _search_yt(self, query: str, ctx: discord.ApplicationContext) -> list[lavalink.AudioTrack]:
@@ -270,7 +272,7 @@ class MusicBot(discord.Bot):
         player = self._get_player(ctx.guild_id)
         
         if 'open.spotify.com' in query:
-            query = spotify.query_from_link(query)
+            query = query_from_link(query)
             if query is None:
                 await ctx.respond("You did not provide a valid spotify URL!")
                 return []

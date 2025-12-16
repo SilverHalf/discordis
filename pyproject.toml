@@ -1,0 +1,13 @@
+[project]
+name = "discordis"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "audioop-lts>=0.2.2",
+    "lavalink>=5.9.0",
+    "py-cord>=2.6.1",
+    "python-dotenv>=1.2.1",
+    "spotipy>=2.25.2",
+]

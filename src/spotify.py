@@ -21,9 +21,3 @@ def query_from_link(url: str) -> str | None:
     except spotipy.SpotifyException:
         return None
     return f'{track['name']} {' '.join(artist['name'] for artist in track['artists'])}'
-
-
-if __name__ == "__main__":
-    from dotenv import load_dotenv
-    load_dotenv()
-    query_from_link('https://open.spotify.com/track/0GqGrPWhmiRX9BU93')

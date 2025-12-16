@@ -1,8 +1,10 @@
+'''This module contains useful functions for creating discord embeds.'''
+
 from lavalink import AudioTrack
 from datetime import timedelta
 import discord
 
-def track(name: str, track: AudioTrack) -> discord.Embed:
+def display_track(name: str, track: AudioTrack) -> discord.Embed:
     '''Creates an embed for the given track with the given message.'''
 
     embed = discord.Embed(color=discord.Colour.dark_green())
@@ -14,7 +16,7 @@ def track(name: str, track: AudioTrack) -> discord.Embed:
 
     return embed
 
-def queue_display(name: str, tracks: list[AudioTrack]) -> discord.Embed:
+def display_queue(name: str, tracks: list[AudioTrack]) -> discord.Embed:
     '''Creates an embed for a list of tracks.'''
 
     embed = discord.Embed(title=name, color=discord.Colour.dark_green())
@@ -26,7 +28,7 @@ def queue_display(name: str, tracks: list[AudioTrack]) -> discord.Embed:
     
     return embed
 
-def search_display(tracks: list[AudioTrack]) -> discord.Embed:
+def display_search(tracks: list[AudioTrack]) -> discord.Embed:
     '''Shows search options.'''
 
     embed = discord.Embed(

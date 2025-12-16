@@ -1,11 +1,9 @@
 import discord
 from dotenv import load_dotenv
-from bot import MusicBot
+from src.bot import MusicBot
 from os import getenv
 
 load_dotenv()
-
-# todo autostart lavalink jar?
 
 bot = MusicBot()
 

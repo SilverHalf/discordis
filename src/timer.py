@@ -2,8 +2,8 @@ import asyncio
 
 class DisconnectTimer:
     '''
-    Disconnects.
-    executes the function after the timer expires.
+    Executes the given callback after the timer expires.
+    Can be cancelled by calling `cancel()`.
     '''
 
     def __init__(self, timeout: int, callback, *args):
